@@ -3,76 +3,100 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { aggregateToBuckets } from './index.js';
 
-const AGENTS_DIR = join(homedir(), '.openclaw', 'agents');
+// OpenClaw stores data at ~/.openclaw/agents/<agentId>/sessions/*.jsonl
+// Legacy paths: ~/.clawdbot, ~/.moltbot, ~/.moldbot
+const POSSIBLE_ROOTS = [
+  join(homedir(), '.openclaw'),
+  join(homedir(), '.clawdbot'),
+  join(homedir(), '.moltbot'),
+  join(homedir(), '.moldbot'),
+];
+
+/** Normalize usage fields — OpenClaw supports multiple naming conventions */
+function getTokens(usage, ...keys) {
+  for (const key of keys) {
+    if (usage[key] != null && usage[key] > 0) return usage[key];
+  }
+  return 0;
+}
 
 export async function parse(lastSync) {
-  if (!existsSync(AGENTS_DIR)) return [];
-
   const entries = [];
-  let agentDirs;
-  try {
-    agentDirs = readdirSync(AGENTS_DIR, { withFileTypes: true })
-      .filter(d => d.isDirectory());
-  } catch {
-    return [];
-  }
 
-  for (const agentDir of agentDirs) {
-    const project = agentDir.name;
-    const sessionsDir = join(AGENTS_DIR, agentDir.name, 'sessions');
-    if (!existsSync(sessionsDir)) continue;
+  for (const root of POSSIBLE_ROOTS) {
+    const agentsDir = join(root, 'agents');
+    if (!existsSync(agentsDir)) continue;
 
-    let files;
+    let agentDirs;
     try {
-      files = readdirSync(sessionsDir).filter(f => f.endsWith('.jsonl'));
+      agentDirs = readdirSync(agentsDir, { withFileTypes: true })
+        .filter(d => d.isDirectory());
     } catch {
       continue;
     }
 
-    for (const file of files) {
-      const filePath = join(sessionsDir, file);
-      if (lastSync) {
-        try {
-          const stat = statSync(filePath);
-          if (stat.mtime <= new Date(lastSync)) continue;
-        } catch {
-          continue;
-        }
-      }
+    for (const agentDir of agentDirs) {
+      const project = agentDir.name;
+      const sessionsDir = join(agentsDir, agentDir.name, 'sessions');
+      if (!existsSync(sessionsDir)) continue;
 
-      let content;
+      let files;
       try {
-        content = readFileSync(filePath, 'utf-8');
+        files = readdirSync(sessionsDir).filter(f => f.endsWith('.jsonl'));
       } catch {
         continue;
       }
 
-      for (const line of content.split('\n')) {
-        if (!line.trim()) continue;
+      for (const file of files) {
+        const filePath = join(sessionsDir, file);
+        if (lastSync) {
+          try {
+            const stat = statSync(filePath);
+            if (stat.mtime <= new Date(lastSync)) continue;
+          } catch {
+            continue;
+          }
+        }
+
+        let content;
         try {
-          const obj = JSON.parse(line);
-
-          const usage = obj.usage || obj.message?.usage;
-          if (!usage) continue;
-
-          const timestamp = obj.timestamp || obj.created_at;
-          if (!timestamp) continue;
-          const ts = new Date(timestamp);
-          if (isNaN(ts.getTime())) continue;
-          if (lastSync && ts <= new Date(lastSync)) continue;
-
-          entries.push({
-            source: 'openclaw',
-            model: obj.model || obj.message?.model || 'unknown',
-            project,
-            timestamp: ts,
-            inputTokens: usage.input_tokens || 0,
-            outputTokens: usage.output_tokens || 0,
-            cachedInputTokens: usage.cache_read_input_tokens || 0,
-            reasoningOutputTokens: 0,
-          });
+          content = readFileSync(filePath, 'utf-8');
         } catch {
           continue;
+        }
+
+        for (const line of content.split('\n')) {
+          if (!line.trim()) continue;
+          try {
+            const obj = JSON.parse(line);
+
+            // Only process message entries with assistant role
+            if (obj.type !== 'message') continue;
+            const msg = obj.message;
+            if (!msg || msg.role !== 'assistant') continue;
+
+            const usage = msg.usage;
+            if (!usage) continue;
+
+            const timestamp = obj.timestamp || msg.timestamp;
+            if (!timestamp) continue;
+            const ts = new Date(typeof timestamp === 'number' ? timestamp : timestamp);
+            if (isNaN(ts.getTime())) continue;
+            if (lastSync && ts <= new Date(lastSync)) continue;
+
+            entries.push({
+              source: 'openclaw',
+              model: msg.model || obj.model || 'unknown',
+              project,
+              timestamp: ts,
+              inputTokens: getTokens(usage, 'input', 'inputTokens', 'input_tokens', 'promptTokens', 'prompt_tokens'),
+              outputTokens: getTokens(usage, 'output', 'outputTokens', 'output_tokens', 'completionTokens', 'completion_tokens'),
+              cachedInputTokens: getTokens(usage, 'cacheRead', 'cache_read', 'cache_read_input_tokens'),
+              reasoningOutputTokens: 0,
+            });
+          } catch {
+            continue;
+          }
         }
       }
     }
