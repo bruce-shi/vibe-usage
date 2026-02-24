@@ -1,12 +1,103 @@
+import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { aggregateToBuckets } from './index.js';
 
 const DATA_DIR = join(homedir(), '.local', 'share', 'opencode');
+const DB_PATH = join(DATA_DIR, 'opencode.db');
 const MESSAGES_DIR = join(DATA_DIR, 'storage', 'message');
 
+/**
+ * Parse opencode usage data.
+ * Tries SQLite database first (opencode >= v0.2), falls back to legacy JSON files.
+ */
 export async function parse(lastSync) {
+  if (existsSync(DB_PATH)) {
+    try {
+      return parseFromSqlite(lastSync);
+    } catch (err) {
+      process.stderr.write(`warn: opencode sqlite parse failed (${err.message}), trying legacy json...\n`);
+    }
+  }
+  return parseFromJson(lastSync);
+}
+
+function parseFromSqlite(lastSync) {
+  // Build WHERE clause: only messages with token data
+  const conditions = [
+    "(json_extract(data, '$.tokens.input') > 0 OR json_extract(data, '$.tokens.output') > 0)",
+  ];
+  if (lastSync) {
+    const sinceMs = new Date(lastSync).getTime();
+    conditions.push(`time_created > ${sinceMs}`);
+  }
+
+  const query = `SELECT data FROM message WHERE ${conditions.join(' AND ')}`;
+
+  let output;
+  try {
+    output = execFileSync('sqlite3', [
+      '-json',
+      DB_PATH,
+      query,
+    ], { encoding: 'utf-8', maxBuffer: 100 * 1024 * 1024, timeout: 30000 });
+  } catch (err) {
+    if (err.status === 127 || (err.message && err.message.includes('ENOENT'))) {
+      throw new Error('sqlite3 CLI not found. Install sqlite3 to sync opencode data.');
+    }
+    throw err;
+  }
+
+  output = output.trim();
+  if (!output || output === '[]') return [];
+
+  let rows;
+  try {
+    rows = JSON.parse(output);
+  } catch {
+    throw new Error('Failed to parse sqlite3 JSON output');
+  }
+
+  const entries = [];
+  for (const row of rows) {
+    let data;
+    try {
+      data = JSON.parse(row.data);
+    } catch {
+      continue;
+    }
+
+    if (!data.modelID) continue;
+
+    const tokens = data.tokens;
+    if (!tokens) continue;
+    if (!tokens.input && !tokens.output) continue;
+
+    const timestamp = new Date(data.time?.created);
+    if (isNaN(timestamp.getTime())) continue;
+    if (lastSync && timestamp <= new Date(lastSync)) continue;
+
+    const rootPath = data.path?.root;
+    const project = rootPath ? basename(rootPath) : 'unknown';
+
+    entries.push({
+      source: 'opencode',
+      model: data.modelID || 'unknown',
+      project,
+      timestamp,
+      inputTokens: tokens.input || 0,
+      outputTokens: tokens.output || 0,
+      cachedInputTokens: tokens.cache?.read || 0,
+      reasoningOutputTokens: tokens.reasoning || 0,
+    });
+  }
+
+  return aggregateToBuckets(entries);
+}
+
+/** Legacy parser: reads JSON files from storage/message directories. */
+function parseFromJson(lastSync) {
   if (!existsSync(MESSAGES_DIR)) return [];
 
   const entries = [];
@@ -45,9 +136,7 @@ export async function parse(lastSync) {
         continue;
       }
 
-
       if (!data.modelID) continue;
-
 
       const tokens = data.tokens;
       if (!tokens) continue;
@@ -56,7 +145,6 @@ export async function parse(lastSync) {
       const timestamp = new Date(data.time?.created);
       if (isNaN(timestamp.getTime())) continue;
       if (lastSync && timestamp <= new Date(lastSync)) continue;
-
 
       const rootPath = data.path?.root;
       const project = rootPath ? basename(rootPath) : 'unknown';

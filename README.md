@@ -30,7 +30,7 @@ npx vibe-usage status   # Show config & detected tools
 | Claude Code | Yes (session hook) | `~/.claude/projects/` |
 | Codex CLI | Yes (notify hook) | `~/.codex/sessions/` |
 | Gemini CLI | Yes (session hook) | `~/.gemini/tmp/` |
-| OpenCode | Manual only | `~/.local/share/opencode/` |
+| OpenCode | Manual only | `~/.local/share/opencode/opencode.db` (SQLite) |
 | OpenClaw | Manual only | `~/.openclaw/agents/` |
 
 ## How It Works
