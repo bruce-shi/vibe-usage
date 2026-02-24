@@ -2,10 +2,12 @@ import { loadConfig, saveConfig } from './config.js';
 import { ingest } from './api.js';
 import { parsers } from './parsers/index.js';
 
+const BATCH_SIZE = 500;
+
 export async function runSync() {
   const config = loadConfig();
   if (!config?.apiKey) {
-    console.error('Not configured. Run `npx vibe-usage init` first.');
+    console.error('Not configured. Run `npx @vibe-cafe/vibe-usage init` first.');
     process.exit(1);
   }
 
@@ -28,19 +30,27 @@ export async function runSync() {
     return 0;
   }
 
+  const apiUrl = config.apiUrl || 'https://vibecafe.ai';
+  let totalIngested = 0;
+
   try {
-    const result = await ingest(
-      config.apiUrl || 'https://vibecafe.ai',
-      config.apiKey,
-      allBuckets
-    );
+    for (let i = 0; i < allBuckets.length; i += BATCH_SIZE) {
+      const batch = allBuckets.slice(i, i + BATCH_SIZE);
+      const result = await ingest(apiUrl, config.apiKey, batch);
+      totalIngested += result.ingested ?? batch.length;
+
+      if (allBuckets.length > BATCH_SIZE) {
+        process.stdout.write(`  ${Math.min(i + BATCH_SIZE, allBuckets.length)}/${allBuckets.length} buckets...\r`);
+      }
+    }
+
     config.lastSync = new Date().toISOString();
     saveConfig(config);
-    console.log(`Synced ${result.ingested ?? allBuckets.length} buckets.`);
-    return result.ingested ?? allBuckets.length;
+    console.log(`Synced ${totalIngested} buckets.`);
+    return totalIngested;
   } catch (err) {
     if (err.message === 'UNAUTHORIZED') {
-      console.error('Invalid API key. Run `npx vibe-usage init` to reconfigure.');
+      console.error('Invalid API key. Run `npx @vibe-cafe/vibe-usage init` to reconfigure.');
       process.exit(1);
     }
     console.error(`Sync failed: ${err.message}`);
