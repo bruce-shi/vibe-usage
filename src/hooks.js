@@ -1,12 +1,44 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 
-const SYNC_CMD = 'npx @vibe-cafe/vibe-usage sync 2>/dev/null &';
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'));
+const SYNC_CMD = `npx @vibe-cafe/vibe-usage@${pkg.version} sync 2>/dev/null &`;
 
+/**
+ * Check if a SessionEnd hook array (new or old format) already contains a vibe-usage hook.
+ */
 function hasVibeUsageHook(hooks) {
   if (!Array.isArray(hooks)) return false;
-  return hooks.some(h => h.command && h.command.includes('vibe-usage'));
+  return hooks.some(entry => {
+    // New format: { matcher?: "...", hooks: [{ type, command }] }
+    if (Array.isArray(entry.hooks)) {
+      return entry.hooks.some(h => h.command && h.command.includes('vibe-usage'));
+    }
+    // Old format: { type, command } directly
+    if (entry.command && entry.command.includes('vibe-usage')) return true;
+    return false;
+  });
+}
+
+/**
+ * Migrate old-format hook entries to the new matcher format.
+ * Old: [{ type: "command", command: "..." }]
+ * New: [{ hooks: [{ type: "command", command: "..." }] }]
+ */
+function migrateOldFormatHooks(hooks) {
+  if (!Array.isArray(hooks)) return hooks;
+  return hooks.map(entry => {
+    // Already new format (has "hooks" array)
+    if (Array.isArray(entry.hooks)) return entry;
+    // Old format: bare handler → wrap in matcher group
+    if (entry.type && entry.command) {
+      return { hooks: [entry] };
+    }
+    return entry;
+  });
 }
 
 export function injectClaudeCode() {
@@ -21,11 +53,28 @@ export function injectClaudeCode() {
   if (!settings.hooks) settings.hooks = {};
   if (!settings.hooks.SessionEnd) settings.hooks.SessionEnd = [];
 
+  // Migrate any old-format hooks first
+  settings.hooks.SessionEnd = migrateOldFormatHooks(settings.hooks.SessionEnd);
+
   if (hasVibeUsageHook(settings.hooks.SessionEnd)) {
-    return { injected: false, reason: 'already installed' };
+    // Update the command in existing hook to pin current version
+    for (const group of settings.hooks.SessionEnd) {
+      if (Array.isArray(group.hooks)) {
+        for (const h of group.hooks) {
+          if (h.command && h.command.includes('vibe-usage')) {
+            h.command = SYNC_CMD;
+          }
+        }
+      }
+    }
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8');
+    return { injected: false, reason: 'already installed (updated)' };
   }
 
-  settings.hooks.SessionEnd.push({ type: 'command', command: SYNC_CMD });
+  // New format: matcher group with hooks array
+  settings.hooks.SessionEnd.push({
+    hooks: [{ type: 'command', command: SYNC_CMD }],
+  });
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8');
   return { injected: true };
 }
@@ -40,7 +89,13 @@ export function injectCodex() {
   }
 
   if (content.includes('vibe-usage')) {
-    return { injected: false, reason: 'already installed' };
+    // Update existing command to pin current version
+    content = content.replace(
+      /npx @vibe-cafe\/vibe-usage(?:@[\d.]+)? sync[^"']*/g,
+      SYNC_CMD,
+    );
+    writeFileSync(configPath, content, 'utf-8');
+    return { injected: false, reason: 'already installed (updated)' };
   }
 
   const notifySection = `\n[notify]\ncommand = "${SYNC_CMD}"\n`;
@@ -73,6 +128,7 @@ export function injectGeminiCli() {
     return { injected: false, reason: 'already installed' };
   }
 
+  // Gemini CLI still uses the flat format (no matcher groups)
   settings.hooks.SessionEnd.push({ type: 'command', command: SYNC_CMD });
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8');
   return { injected: true };
