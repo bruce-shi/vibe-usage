@@ -1,23 +1,39 @@
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { aggregateToBuckets } from './index.js';
 
 const SESSIONS_DIR = join(homedir(), '.codex', 'sessions');
 
+/**
+ * Recursively find all .jsonl files under a directory.
+ * Codex CLI stores sessions as: ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
+ */
+function findJsonlFiles(dir) {
+  const results = [];
+  if (!existsSync(dir)) return results;
+  try {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        results.push(...findJsonlFiles(fullPath));
+      } else if (entry.name.endsWith('.jsonl')) {
+        results.push(fullPath);
+      }
+    }
+  } catch {
+    // ignore unreadable directories
+  }
+  return results;
+}
+
 export async function parse(lastSync) {
   if (!existsSync(SESSIONS_DIR)) return [];
 
   const entries = [];
-  let files;
-  try {
-    files = readdirSync(SESSIONS_DIR).filter(f => f.endsWith('.jsonl'));
-  } catch {
-    return [];
-  }
-
-  for (const file of files) {
-    const filePath = join(SESSIONS_DIR, file);
+  const files = findJsonlFiles(SESSIONS_DIR);
+  if (files.length === 0) return [];
+  for (const filePath of files) {
     if (lastSync) {
       try {
         const stat = statSync(filePath);
@@ -27,8 +43,6 @@ export async function parse(lastSync) {
       }
     }
 
-    const project = basename(file, '.jsonl');
-
     let content;
     try {
       content = readFileSync(filePath, 'utf-8');
@@ -36,9 +50,30 @@ export async function parse(lastSync) {
       continue;
     }
 
+    // Extract project name and model from session_meta line
+    let sessionProject = 'unknown';
+    let sessionModel = 'unknown';
+    for (const line of content.split('\n')) {
+      if (!line.trim()) continue;
+      try {
+        const obj = JSON.parse(line);
+        if (obj.type === 'session_meta' && obj.payload) {
+          const meta = obj.payload;
+          if (meta.cwd) {
+            sessionProject = meta.cwd.split('/').pop() || 'unknown';
+          }
+          if (meta.git?.repository_url) {
+            // e.g. https://github.com/org/repo.git → org/repo
+            const match = meta.git.repository_url.match(/([^/]+\/[^/]+?)(?:\.git)?$/);
+            if (match) sessionProject = match[1];
+          }
+          break;
+        }
+      } catch { break; }
+    }
+
     // Track previous cumulative totals per model to compute deltas when only total_token_usage is available
     const prevTotal = new Map();
-
     for (const line of content.split('\n')) {
       if (!line.trim()) continue;
       try {
@@ -78,12 +113,12 @@ export async function parse(lastSync) {
         }
         if (!usage) continue;
 
-        const model = info.model || payload.model || 'unknown';
+        const model = info.model || payload.model || sessionModel;
 
         entries.push({
           source: 'codex',
           model,
-          project,
+          project: sessionProject,
           timestamp,
           inputTokens: usage.input_tokens || 0,
           outputTokens: usage.output_tokens || 0,

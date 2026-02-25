@@ -55,8 +55,11 @@ export async function parse(lastSync) {
 
     const messages = data.messages || data.history || [];
     for (const msg of messages) {
+      // New format: tokens on type=gemini messages (ChatRecordingService)
+      // Old format: usage/usageMetadata on any message
+      const tokens = msg.tokens;
       const usage = msg.usage || msg.usageMetadata || msg.token_count;
-      if (!usage) continue;
+      if (!tokens && !usage) continue;
 
       const timestamp = msg.timestamp || msg.createTime || data.createTime;
       if (!timestamp) continue;
@@ -64,16 +67,31 @@ export async function parse(lastSync) {
       if (isNaN(ts.getTime())) continue;
       if (lastSync && ts <= new Date(lastSync)) continue;
 
-      entries.push({
-        source: 'gemini-cli',
-        model: msg.model || data.model || 'unknown',
-        project: 'unknown',
-        timestamp: ts,
-        inputTokens: usage.promptTokenCount || usage.input_tokens || 0,
-        outputTokens: usage.candidatesTokenCount || usage.output_tokens || 0,
-        cachedInputTokens: usage.cachedContentTokenCount || 0,
-        reasoningOutputTokens: usage.thoughtsTokenCount || 0,
-      });
+      if (tokens) {
+        // New format: { input, output, cached, thoughts, tool, total }
+        entries.push({
+          source: 'gemini-cli',
+          model: msg.model || data.model || 'unknown',
+          project: 'unknown',
+          timestamp: ts,
+          inputTokens: tokens.input || 0,
+          outputTokens: tokens.output || 0,
+          cachedInputTokens: tokens.cached || 0,
+          reasoningOutputTokens: tokens.thoughts || 0,
+        });
+      } else {
+        // Old format: { promptTokenCount, candidatesTokenCount, ... }
+        entries.push({
+          source: 'gemini-cli',
+          model: msg.model || data.model || 'unknown',
+          project: 'unknown',
+          timestamp: ts,
+          inputTokens: usage.promptTokenCount || usage.input_tokens || 0,
+          outputTokens: usage.candidatesTokenCount || usage.output_tokens || 0,
+          cachedInputTokens: usage.cachedContentTokenCount || 0,
+          reasoningOutputTokens: usage.thoughtsTokenCount || 0,
+        });
+      }
     }
   }
 
