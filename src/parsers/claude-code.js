@@ -20,7 +20,7 @@ export async function parse(lastSync) {
       entries.push({
         source: 'claude-code',
         model: breakdown.modelName,
-        project: session.projectPath || 'unknown',
+        project: stripSessionId(session.projectPath),
         timestamp: new Date(session.lastActivity),
         inputTokens: breakdown.inputTokens,
         outputTokens: breakdown.outputTokens,
@@ -31,4 +31,16 @@ export async function parse(lastSync) {
   }
 
   return aggregateToBuckets(entries);
+}
+
+/**
+ * Strip session UUID suffix from ccusage project path.
+ * ccusage returns paths like '-Users-foo-project/77e854f9-...' for subagent sessions.
+ * We only keep the directory name part before the first '/'.
+ */
+function stripSessionId(raw) {
+  if (!raw || raw === 'unknown' || raw === 'Unknown Project') return 'unknown';
+  const slashIdx = raw.indexOf('/');
+  if (slashIdx !== -1) return raw.slice(0, slashIdx);
+  return raw;
 }
