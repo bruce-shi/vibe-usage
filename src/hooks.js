@@ -1,11 +1,8 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'));
-const SYNC_CMD = `npx @vibe-cafe/vibe-usage@${pkg.version} sync 2>/dev/null &`;
+const SYNC_CMD = 'npx @vibe-cafe/vibe-usage sync 2>/dev/null &';
 
 /**
  * Check if a SessionEnd hook array (new or old format) already contains a vibe-usage hook.
@@ -57,7 +54,7 @@ export function injectClaudeCode() {
   settings.hooks.SessionEnd = migrateOldFormatHooks(settings.hooks.SessionEnd);
 
   if (hasVibeUsageHook(settings.hooks.SessionEnd)) {
-    // Update the command in existing hook to pin current version
+    // Update the command in existing hook to use latest
     for (const group of settings.hooks.SessionEnd) {
       if (Array.isArray(group.hooks)) {
         for (const h of group.hooks) {
@@ -89,7 +86,7 @@ export function injectCodex() {
   }
 
   if (content.includes('vibe-usage')) {
-    // Update existing command to pin current version
+    // Update existing command to use latest
     content = content.replace(
       /npx @vibe-cafe\/vibe-usage(?:@[\d.]+)? sync[^"']*/g,
       SYNC_CMD,
