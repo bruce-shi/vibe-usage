@@ -85,26 +85,31 @@ export function injectCodex() {
     mkdirSync(dirname(configPath), { recursive: true });
   }
 
+  const notifyLine = `notify = ["sh", "-c", "${SYNC_CMD}"]`;
+
   if (content.includes('vibe-usage')) {
-    // Fix broken [notify] → [[notify]] from previous versions
-    content = content.replace(/^\[notify\]$/gm, '[[notify]]');
-    // Update existing command to use latest
+    // Migrate broken [[notify]] / [notify] table format from previous versions
+    // to correct inline array format: notify = ["sh", "-c", "..."]
     content = content.replace(
-      /npx @vibe-cafe\/vibe-usage(?:@[\d.]+)? sync[^"']*/g,
-      SYNC_CMD,
+      /^\[\[?notify\]\]?\n(?:command\s*=\s*["'][^"']*["']\n?)?/gm,
+      notifyLine + '\n',
+    );
+    // Also update existing inline notify = [...] to use latest command
+    content = content.replace(
+      /^notify\s*=\s*\[.*vibe-usage.*\]$/gm,
+      notifyLine,
     );
     writeFileSync(configPath, content, 'utf-8');
     return { injected: false, reason: 'already installed (updated)' };
   }
 
-  const notifySection = `\n[[notify]]\ncommand = "${SYNC_CMD}"\n`;
-  const notifyIdx = content.indexOf('[[notify]]');
-  if (notifyIdx !== -1) {
-    const nextSection = content.indexOf('\n[', notifyIdx + 1);
-    const sectionEnd = nextSection === -1 ? content.length : nextSection;
-    content = content.slice(0, notifyIdx) + `[[notify]]\ncommand = "${SYNC_CMD}"` + content.slice(sectionEnd);
+  // Check if any notify line already exists
+  const hasNotify = /^notify\s*=/m.test(content);
+  if (hasNotify) {
+    // Append our command to existing notify (replace it)
+    content = content.replace(/^notify\s*=\s*\[.*\]$/gm, notifyLine);
   } else {
-    content += notifySection;
+    content += `\n${notifyLine}\n`;
   }
 
   writeFileSync(configPath, content, 'utf-8');
