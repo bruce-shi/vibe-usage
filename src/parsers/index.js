@@ -1,4 +1,4 @@
-import { parse as parseClaudeCode } from './claude-code.js';
+import { parse as parseClaudeCode, commitState as commitClaudeCodeState } from './claude-code.js';
 import { parse as parseCodex } from './codex.js';
 import { parse as parseGeminiCli } from './gemini-cli.js';
 import { parse as parseOpencode } from './opencode.js';
@@ -11,6 +11,8 @@ export const parsers = {
   'opencode': parseOpencode,
   'openclaw': parseOpenclaw,
 };
+
+export const postSyncHooks = [commitClaudeCodeState];
 
 export function roundToHalfHour(date) {
   const d = new Date(date);
