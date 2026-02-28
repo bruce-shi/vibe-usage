@@ -102,14 +102,16 @@ function _send(apiUrl, apiKey, buckets, onProgress) {
 }
 
 /**
- * DELETE all usage data for the authenticated user.
- * @param {string} apiUrl - Base URL (e.g. "https://vibecafe.ai")
- * @param {string} apiKey - Bearer token (vbu_xxx)
+ * DELETE usage data for the authenticated user.
+ * @param {string} apiUrl
+ * @param {string} apiKey
+ * @param {{hostname?: string}} [opts]
  * @returns {Promise<{deleted: number}>}
  */
-export function deleteAllData(apiUrl, apiKey) {
+export function deleteAllData(apiUrl, apiKey, opts) {
   return new Promise((resolve, reject) => {
     const url = new URL('/api/usage/ingest', apiUrl);
+    if (opts?.hostname) url.searchParams.set('hostname', opts.hostname);
     const mod = url.protocol === 'https:' ? https : http;
 
     const req = mod.request(url, {

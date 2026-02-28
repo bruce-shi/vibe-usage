@@ -105,7 +105,7 @@ export async function run(args) {
     }
     case 'reset': {
       const { runReset } = await import('./reset.js');
-      await runReset();
+      await runReset(args.slice(1));
       break;
     }
     case 'config': {
@@ -127,6 +127,7 @@ export async function run(args) {
     npx vibe-usage init         Set up API key
     npx vibe-usage sync         Manually sync usage data
     npx vibe-usage reset        Delete all data and re-upload
+    npx vibe-usage reset --host  Delete data for this host only and re-upload
     npx vibe-usage status       Show config and detected tools
     npx vibe-usage config show  Show full config as JSON
     npx vibe-usage config get <key>   Get a config value
