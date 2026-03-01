@@ -1,5 +1,5 @@
 ---
-name: vibe_usage
+name: vibe-usage
 description: Track and sync AI coding tool token usage to vibecafe.ai dashboard.
 metadata:
   {
