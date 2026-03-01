@@ -16,11 +16,13 @@ This will:
 ## Commands
 
 ```bash
-npx vibe-usage          # Init (first run) or sync (subsequent runs)
-npx vibe-usage init     # Re-run setup
-npx vibe-usage sync     # Manual sync
-npx vibe-usage reset    # Delete all data and re-upload from local logs
-npx vibe-usage status   # Show config & detected tools
+npx vibe-usage              # Init (first run) or sync (subsequent runs)
+npx vibe-usage init         # Re-run setup
+npx vibe-usage sync         # Manual sync
+npx vibe-usage daemon       # Continuous sync (every 5 minutes)
+npx vibe-usage reset        # Delete all data and re-upload from local logs
+npx vibe-usage reset --local  # Delete this host's data only and re-upload
+npx vibe-usage status       # Show config & detected tools
 ```
 
 ## Supported Tools
@@ -39,11 +41,21 @@ npx vibe-usage status   # Show config & detected tools
 - Aggregates token usage into 30-minute buckets
 - Uploads to your vibecafe.ai dashboard
 - Only syncs new data since last sync (incremental)
-- For continuous syncing, use the [Vibe Usage Mac app](https://github.com/vibe-cafe/vibe-usage-app) (auto-syncs every 5 minutes)
+- For continuous syncing, use `npx vibe-usage daemon` or the [Vibe Usage Mac app](https://github.com/vibe-cafe/vibe-usage-app)
 
 ## Config
 
 Config stored at `~/.vibe-usage/config.json`. Contains your API key and last sync timestamp.
+
+## Daemon Mode
+
+Run continuous syncing in the foreground (every 5 minutes):
+
+```bash
+npx vibe-usage daemon
+```
+
+Press Ctrl+C to stop. For background use: `nohup npx vibe-usage daemon &`
 
 ## License
 

@@ -11,10 +11,11 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
-export async function runSync() {
+export async function runSync({ throws = false, quiet = false } = {}) {
   const config = loadConfig();
   if (!config?.apiKey) {
     console.error('Not configured. Run `npx @vibe-cafe/vibe-usage init` first.');
+    if (throws) throw new Error('NOT_CONFIGURED');
     process.exit(1);
   }
 
@@ -38,7 +39,7 @@ export async function runSync() {
   }
 
   if (allBuckets.length === 0) {
-    console.log('No new usage data found.');
+    if (!quiet) console.log('No new usage data found.');
     return 0;
   }
 
@@ -87,6 +88,7 @@ export async function runSync() {
   } catch (err) {
     if (err.message === 'UNAUTHORIZED') {
       console.error('Invalid API key. Run `npx @vibe-cafe/vibe-usage init` to reconfigure.');
+      if (throws) throw err;
       process.exit(1);
     }
     // Report partial success
@@ -95,6 +97,7 @@ export async function runSync() {
     } else {
       console.error(`Sync failed: ${err.message}`);
     }
+    if (throws) throw err;
     process.exit(1);
   }
 }

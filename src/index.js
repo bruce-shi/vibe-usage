@@ -107,6 +107,12 @@ export async function run(args) {
       await runReset(args.slice(1));
       break;
     }
+    case 'daemon':
+    case '--daemon': {
+      const { runDaemon } = await import('./daemon.js');
+      await runDaemon();
+      break;
+    }
     case 'config': {
       handleConfig(args.slice(1));
       break;
@@ -125,8 +131,9 @@ export async function run(args) {
     npx vibe-usage              Init (first run) or sync
     npx vibe-usage init         Set up API key
     npx vibe-usage sync         Manually sync usage data
+    npx vibe-usage daemon       Continuous sync (every 5m)
     npx vibe-usage reset        Delete all data and re-upload
-    npx vibe-usage reset --host  Delete data for this host only and re-upload
+    npx vibe-usage reset --local  Delete data for this host only and re-upload
     npx vibe-usage status       Show config and detected tools
     npx vibe-usage config show  Show full config as JSON
     npx vibe-usage config get <key>   Get a config value
