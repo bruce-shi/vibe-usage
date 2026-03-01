@@ -1,6 +1,6 @@
 import { hostname as osHostname } from 'node:os';
 import { loadConfig, saveConfig } from './config.js';
-import { ingest } from './api.js';
+import { ingest, fetchSettings } from './api.js';
 import { parsers, postSyncHooks } from './parsers/index.js';
 
 const BATCH_SIZE = 100;
@@ -49,7 +49,20 @@ export async function runSync({ throws = false, quiet = false } = {}) {
     b.hostname = host;
   }
 
+  // Privacy: check if user allows project name upload
   const apiUrl = config.apiUrl || 'https://vibecafe.ai';
+  const settings = await fetchSettings(apiUrl, config.apiKey);
+  const uploadProject = settings?.uploadProject === true;
+
+  if (uploadProject) {
+    console.log('📂 项目名: 上传 (可在 vibecafe.ai/usage 设置中关闭)');
+  } else {
+    console.log('🔒 项目名: 已隐藏');
+    for (const b of allBuckets) {
+      b.project = 'unknown';
+    }
+  }
+
   let totalIngested = 0;
   const totalBatches = Math.ceil(allBuckets.length / BATCH_SIZE);
 

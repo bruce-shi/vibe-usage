@@ -1,6 +1,6 @@
 {
   "name": "@vibe-cafe/vibe-usage",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Track your AI coding tool token usage and sync to vibecafe.ai",
   "type": "module",
   "bin": {
@@ -24,6 +24,14 @@
   ],
   "dependencies": {
     "ccusage": "18.0.5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vibe-cafe/vibe-usage.git"
+  },
+  "homepage": "https://github.com/vibe-cafe/vibe-usage#readme",
+  "bugs": {
+    "url": "https://github.com/vibe-cafe/vibe-usage/issues"
   },
   "license": "MIT"
 }

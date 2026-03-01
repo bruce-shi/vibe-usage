@@ -151,3 +151,42 @@ export function deleteAllData(apiUrl, apiKey, opts) {
     req.end();
   });
 }
+
+/**
+ * GET user settings from the vibecafe API.
+ * Returns null on any failure (network, auth, timeout) — caller should fail-safe.
+ * @param {string} apiUrl
+ * @param {string} apiKey
+ * @returns {Promise<{uploadProject: boolean} | null>}
+ */
+export function fetchSettings(apiUrl, apiKey) {
+  return new Promise((resolve) => {
+    const url = new URL('/api/usage/settings', apiUrl);
+    const mod = url.protocol === 'https:' ? https : http;
+
+    const req = mod.request(url, {
+      method: 'GET',
+      timeout: 10_000,
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+    }, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          resolve(null);
+          return;
+        }
+        try {
+          resolve(JSON.parse(data));
+        } catch {
+          resolve(null);
+        }
+      });
+    });
+
+    req.on('error', () => resolve(null));
+    req.on('timeout', () => { req.destroy(); resolve(null); });
+  });
+}
