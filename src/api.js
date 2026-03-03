@@ -188,5 +188,6 @@ export function fetchSettings(apiUrl, apiKey) {
 
     req.on('error', () => resolve(null));
     req.on('timeout', () => { req.destroy(); resolve(null); });
+    req.end();
   });
 }
