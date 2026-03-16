@@ -41,7 +41,7 @@ npx vibe-usage status       # Show config & detected tools
 
 - Parses local session logs from each AI coding tool
 - Aggregates token usage into 30-minute buckets
-- Extracts session metadata: active time (sum of turn durations), total duration, message counts
+- Extracts session metadata from all 7 parsers: active time (sum of turn durations), total duration, message counts
 - Uploads buckets + sessions to your vibecafe.ai dashboard
 - Stateless: computes full totals from local logs each sync (idempotent, no state files)
 - For continuous syncing, use `npx vibe-usage daemon` or the [Vibe Usage Mac app](https://github.com/vibe-cafe/vibe-usage-app)
