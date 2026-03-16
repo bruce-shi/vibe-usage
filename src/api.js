@@ -5,21 +5,11 @@ import { URL } from 'node:url';
 const MAX_RETRIES = 3;
 const INITIAL_DELAY = 1000;
 
-/**
- * POST buckets to the vibecafe ingest API.
- * Uses native http/https — zero dependencies.
- * Retries up to 3 times with exponential backoff on transient failures.
- * @param {string} apiUrl - Base URL (e.g. "https://vibecafe.ai")
- * @param {string} apiKey - Bearer token (vbu_xxx)
- * @param {Array} buckets - Array of usage bucket objects
- * @param {{onProgress?: (sent: number, total: number) => void}} [opts]
- * @returns {Promise<{ingested: number}>}
- */
-export async function ingest(apiUrl, apiKey, buckets, opts) {
+export async function ingest(apiUrl, apiKey, buckets, opts, sessions) {
   let lastError;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      return await _send(apiUrl, apiKey, buckets, opts?.onProgress);
+      return await _send(apiUrl, apiKey, buckets, opts?.onProgress, sessions);
     } catch (err) {
       lastError = err;
       // Don't retry auth errors or client errors
@@ -35,10 +25,12 @@ export async function ingest(apiUrl, apiKey, buckets, opts) {
   throw lastError;
 }
 
-function _send(apiUrl, apiKey, buckets, onProgress) {
+function _send(apiUrl, apiKey, buckets, onProgress, sessions) {
   return new Promise((resolve, reject) => {
     const url = new URL('/api/usage/ingest', apiUrl);
-    const body = Buffer.from(JSON.stringify({ buckets }));
+    const payload = { buckets };
+    if (sessions && sessions.length > 0) payload.sessions = sessions;
+    const body = Buffer.from(JSON.stringify(payload));
     const totalBytes = body.length;
     const mod = url.protocol === 'https:' ? https : http;
 
