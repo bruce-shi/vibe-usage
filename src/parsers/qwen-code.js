@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, basename, sep } from 'node:path';
 import { homedir } from 'node:os';
-import { aggregateToBuckets } from './index.js';
+import { aggregateToBuckets, extractSessions } from './index.js';
 
 /**
  * Qwen Code parser (Gemini CLI fork).
@@ -54,9 +54,10 @@ function extractProject(cwd, filePath) {
 
 export async function parse() {
   const sessionFiles = findSessionFiles(QWEN_TMP_DIR);
-  if (sessionFiles.length === 0) return [];
+  if (sessionFiles.length === 0) return { buckets: [], sessions: [] };
 
   const entries = [];
+  const sessionEvents = [];
   const seenUuids = new Set();
 
   for (const filePath of sessionFiles) {
@@ -72,6 +73,21 @@ export async function parse() {
       try {
         const obj = JSON.parse(line);
 
+        const timestamp = obj.timestamp;
+        if (!timestamp) continue;
+        const ts = new Date(timestamp);
+        if (isNaN(ts.getTime())) continue;
+
+        if (obj.type === 'user' || obj.type === 'assistant') {
+          sessionEvents.push({
+            sessionId: filePath,
+            source: 'qwen-code',
+            project: extractProject(obj.cwd, filePath),
+            timestamp: ts,
+            role: obj.type === 'user' ? 'user' : 'assistant',
+          });
+        }
+
         if (obj.type !== 'assistant') continue;
         const usage = obj.usageMetadata;
         if (!usage) continue;
@@ -83,12 +99,6 @@ export async function parse() {
           seenUuids.add(uuid);
         }
 
-        const timestamp = obj.timestamp;
-        if (!timestamp) continue;
-        const ts = new Date(timestamp);
-        if (isNaN(ts.getTime())) continue;
-
-        // promptTokenCount INCLUDES cachedContentTokenCount — normalize to non-overlapping
         const cached = usage.cachedContentTokenCount || 0;
         const thoughts = usage.thoughtsTokenCount || 0;
 
@@ -108,5 +118,5 @@ export async function parse() {
     }
   }
 
-  return aggregateToBuckets(entries);
+  return { buckets: aggregateToBuckets(entries), sessions: extractSessions(sessionEvents) };
 }

@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, sep } from 'node:path';
 import { homedir } from 'node:os';
-import { aggregateToBuckets } from './index.js';
+import { aggregateToBuckets, extractSessions } from './index.js';
 
 /**
  * Kimi Code CLI parser.
@@ -62,10 +62,11 @@ function loadProjectMap() {
 
 export async function parse() {
   const wireFiles = findWireFiles(KIMI_SESSIONS_DIR);
-  if (wireFiles.length === 0) return [];
+  if (wireFiles.length === 0) return { buckets: [], sessions: [] };
 
   const projectMap = loadProjectMap();
   const entries = [];
+  const sessionEvents = [];
   const seenMessageIds = new Set();
 
   for (const { filePath, workDirHash } of wireFiles) {
@@ -90,6 +91,20 @@ export async function parse() {
 
         if (payload.timestamp) lastTimestamp = payload.timestamp;
         if (payload.model) currentModel = payload.model;
+
+        if (lastTimestamp) {
+          const evTs = new Date(lastTimestamp);
+          if (!isNaN(evTs.getTime())) {
+            const isUser = type === 'UserMessage' || type === 'user_message' || type === 'Input';
+            sessionEvents.push({
+              sessionId: filePath,
+              source: 'kimi-code',
+              project,
+              timestamp: evTs,
+              role: isUser ? 'user' : 'assistant',
+            });
+          }
+        }
 
         if (type !== 'StatusUpdate') continue;
 
@@ -121,5 +136,5 @@ export async function parse() {
     }
   }
 
-  return aggregateToBuckets(entries);
+  return { buckets: aggregateToBuckets(entries), sessions: extractSessions(sessionEvents) };
 }

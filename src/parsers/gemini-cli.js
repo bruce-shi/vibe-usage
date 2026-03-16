@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { aggregateToBuckets } from './index.js';
+import { aggregateToBuckets, extractSessions } from './index.js';
 
 const TMP_DIR = join(homedir(), '.gemini', 'tmp');
 
@@ -32,9 +32,10 @@ function findSessionFiles(baseDir) {
 
 export async function parse() {
   const sessionFiles = findSessionFiles(TMP_DIR);
-  if (sessionFiles.length === 0) return [];
+  if (sessionFiles.length === 0) return { buckets: [], sessions: [] };
 
   const entries = [];
+  const sessionEvents = [];
 
   for (const filePath of sessionFiles) {
 
@@ -47,19 +48,25 @@ export async function parse() {
 
     const messages = data.messages || data.history || [];
     for (const msg of messages) {
-      // New format: tokens on type=gemini messages (ChatRecordingService)
-      // Old format: usage/usageMetadata on any message
-      const tokens = msg.tokens;
-      const usage = msg.usage || msg.usageMetadata || msg.token_count;
-      if (!tokens && !usage) continue;
-
       const timestamp = msg.timestamp || msg.createTime || data.createTime;
       if (!timestamp) continue;
       const ts = new Date(timestamp);
       if (isNaN(ts.getTime())) continue;
 
+      const role = (msg.role === 'user') ? 'user' : 'assistant';
+      sessionEvents.push({
+        sessionId: filePath,
+        source: 'gemini-cli',
+        project: 'unknown',
+        timestamp: ts,
+        role,
+      });
+
+      const tokens = msg.tokens;
+      const usage = msg.usage || msg.usageMetadata || msg.token_count;
+      if (!tokens && !usage) continue;
+
       if (tokens) {
-        // Gemini API: input INCLUDES cached, output INCLUDES thoughts. Normalize to non-overlapping.
         const cached = tokens.cached || 0;
         const thoughts = tokens.thoughts || 0;
         entries.push({
@@ -73,7 +80,6 @@ export async function parse() {
           reasoningOutputTokens: thoughts,
         });
       } else {
-        // Gemini API: promptTokenCount INCLUDES cachedContentTokenCount. Normalize to non-overlapping.
         const cached = usage.cachedContentTokenCount || 0;
         const thoughts = usage.thoughtsTokenCount || 0;
         entries.push({
@@ -90,5 +96,5 @@ export async function parse() {
     }
   }
 
-  return aggregateToBuckets(entries);
+  return { buckets: aggregateToBuckets(entries), sessions: extractSessions(sessionEvents) };
 }

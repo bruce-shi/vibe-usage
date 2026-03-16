@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { homedir } from 'node:os';
-import { aggregateToBuckets } from './index.js';
+import { aggregateToBuckets, extractSessions } from './index.js';
 
 const DATA_DIR = join(homedir(), '.local', 'share', 'opencode');
 const DB_PATH = join(DATA_DIR, 'opencode.db');
@@ -24,12 +24,7 @@ export async function parse() {
 }
 
 function parseFromSqlite() {
-  // Build WHERE clause: only messages with token data
-  const conditions = [
-    "(json_extract(data, '$.tokens.input') > 0 OR json_extract(data, '$.tokens.output') > 0)",
-  ];
-
-  const query = `SELECT data FROM message WHERE ${conditions.join(' AND ')}`;
+  const query = `SELECT data FROM message`;
 
   let output;
   try {
@@ -46,7 +41,7 @@ function parseFromSqlite() {
   }
 
   output = output.trim();
-  if (!output || output === '[]') return [];
+  if (!output || output === '[]') return { buckets: [], sessions: [] };
 
   let rows;
   try {
@@ -56,6 +51,7 @@ function parseFromSqlite() {
   }
 
   const entries = [];
+  const sessionEvents = [];
   for (const row of rows) {
     let data;
     try {
@@ -64,17 +60,25 @@ function parseFromSqlite() {
       continue;
     }
 
-    if (!data.modelID) continue;
-
-    const tokens = data.tokens;
-    if (!tokens) continue;
-    if (!tokens.input && !tokens.output) continue;
-
     const timestamp = new Date(data.time?.created);
     if (isNaN(timestamp.getTime())) continue;
 
     const rootPath = data.path?.root;
     const project = rootPath ? basename(rootPath) : 'unknown';
+    const sessionId = data.sessionID || data.session_id || 'unknown';
+
+    sessionEvents.push({
+      sessionId,
+      source: 'opencode',
+      project,
+      timestamp,
+      role: data.role === 'user' ? 'user' : 'assistant',
+    });
+
+    if (!data.modelID) continue;
+    const tokens = data.tokens;
+    if (!tokens) continue;
+    if (!tokens.input && !tokens.output) continue;
 
     entries.push({
       source: 'opencode',
@@ -88,20 +92,20 @@ function parseFromSqlite() {
     });
   }
 
-  return aggregateToBuckets(entries);
+  return { buckets: aggregateToBuckets(entries), sessions: extractSessions(sessionEvents) };
 }
 
-/** Legacy parser: reads JSON files from storage/message directories. */
 function parseFromJson() {
-  if (!existsSync(MESSAGES_DIR)) return [];
+  if (!existsSync(MESSAGES_DIR)) return { buckets: [], sessions: [] };
 
   const entries = [];
+  const sessionEvents = [];
   let sessionDirs;
   try {
     sessionDirs = readdirSync(MESSAGES_DIR, { withFileTypes: true })
       .filter(d => d.isDirectory() && d.name.startsWith('ses_'));
   } catch {
-    return [];
+    return { buckets: [], sessions: [] };
   }
 
   for (const sessionDir of sessionDirs) {
@@ -123,17 +127,24 @@ function parseFromJson() {
         continue;
       }
 
-      if (!data.modelID) continue;
-
-      const tokens = data.tokens;
-      if (!tokens) continue;
-      if (!tokens.input && !tokens.output) continue;
-
       const timestamp = new Date(data.time?.created);
       if (isNaN(timestamp.getTime())) continue;
 
       const rootPath = data.path?.root;
       const project = rootPath ? basename(rootPath) : 'unknown';
+
+      sessionEvents.push({
+        sessionId: sessionDir.name,
+        source: 'opencode',
+        project,
+        timestamp,
+        role: data.role === 'user' ? 'user' : 'assistant',
+      });
+
+      if (!data.modelID) continue;
+      const tokens = data.tokens;
+      if (!tokens) continue;
+      if (!tokens.input && !tokens.output) continue;
 
       entries.push({
         source: 'opencode',
@@ -148,5 +159,5 @@ function parseFromJson() {
     }
   }
 
-  return aggregateToBuckets(entries);
+  return { buckets: aggregateToBuckets(entries), sessions: extractSessions(sessionEvents) };
 }

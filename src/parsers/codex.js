@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { aggregateToBuckets } from './index.js';
+import { aggregateToBuckets, extractSessions } from './index.js';
 
 const SESSIONS_DIR = join(homedir(), '.codex', 'sessions');
 
@@ -28,11 +28,12 @@ function findJsonlFiles(dir) {
 }
 
 export async function parse() {
-  if (!existsSync(SESSIONS_DIR)) return [];
+  if (!existsSync(SESSIONS_DIR)) return { buckets: [], sessions: [] };
 
   const entries = [];
+  const sessionEvents = [];
   const files = findJsonlFiles(SESSIONS_DIR);
-  if (files.length === 0) return [];
+  if (files.length === 0) return { buckets: [], sessions: [] };
   for (const filePath of files) {
 
     let content;
@@ -64,16 +65,27 @@ export async function parse() {
       } catch { break; }
     }
 
-    // Track model from turn_context events (fallback when token_count lacks model)
     let turnContextModel = 'unknown';
-    // Track previous cumulative totals per model to compute deltas when only total_token_usage is available
     const prevTotal = new Map();
     for (const line of content.split('\n')) {
       if (!line.trim()) continue;
       try {
         const obj = JSON.parse(line);
 
-        // Capture model from top-level turn_context entries
+        if (obj.timestamp) {
+          const evTs = new Date(obj.timestamp);
+          if (!isNaN(evTs.getTime())) {
+            const isUserTurn = obj.type === 'turn_context' || obj.type === 'session_meta';
+            sessionEvents.push({
+              sessionId: filePath,
+              source: 'codex',
+              project: sessionProject,
+              timestamp: evTs,
+              role: isUserTurn ? 'user' : 'assistant',
+            });
+          }
+        }
+
         if (obj.type === 'turn_context' && obj.payload?.model) {
           turnContextModel = obj.payload.model;
           continue;
@@ -135,5 +147,5 @@ export async function parse() {
     }
   }
 
-  return aggregateToBuckets(entries);
+  return { buckets: aggregateToBuckets(entries), sessions: extractSessions(sessionEvents) };
 }

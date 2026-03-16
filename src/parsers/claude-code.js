@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, basename, sep } from 'node:path';
 import { homedir } from 'node:os';
-import { aggregateToBuckets } from './index.js';
+import { aggregateToBuckets, extractSessions } from './index.js';
 
 /**
  * Stateless Claude Code parser.
@@ -58,12 +58,13 @@ function extractProject(filePath) {
 }
 
 export async function parse() {
-  if (!existsSync(CLAUDE_DIR)) return [];
+  if (!existsSync(CLAUDE_DIR)) return { buckets: [], sessions: [] };
 
   const files = findJsonlFiles(CLAUDE_DIR);
-  if (files.length === 0) return [];
+  if (files.length === 0) return { buckets: [], sessions: [] };
 
   const entries = [];
+  const sessionEvents = [];
   const seenUuids = new Set();
 
   for (const filePath of files) {
@@ -81,7 +82,21 @@ export async function parse() {
       try {
         const obj = JSON.parse(line);
 
-        // Only process assistant messages with usage data
+        const timestamp = obj.timestamp;
+        if (!timestamp) continue;
+        const ts = new Date(timestamp);
+        if (isNaN(ts.getTime())) continue;
+
+        if (obj.type === 'user' || obj.type === 'assistant' || obj.type === 'tool_use' || obj.type === 'tool_result') {
+          sessionEvents.push({
+            sessionId: filePath,
+            source: 'claude-code',
+            project,
+            timestamp: ts,
+            role: obj.type === 'user' ? 'user' : 'assistant',
+          });
+        }
+
         if (obj.type !== 'assistant') continue;
         const msg = obj.message;
         if (!msg || !msg.usage) continue;
@@ -89,17 +104,11 @@ export async function parse() {
         const usage = msg.usage;
         if (usage.input_tokens == null && usage.output_tokens == null) continue;
 
-        // Deduplicate by UUID across all files
         const uuid = obj.uuid;
         if (uuid) {
           if (seenUuids.has(uuid)) continue;
           seenUuids.add(uuid);
         }
-
-        const timestamp = obj.timestamp;
-        if (!timestamp) continue;
-        const ts = new Date(timestamp);
-        if (isNaN(ts.getTime())) continue;
 
         entries.push({
           source: 'claude-code',
@@ -117,5 +126,5 @@ export async function parse() {
     }
   }
 
-  return aggregateToBuckets(entries);
+  return { buckets: aggregateToBuckets(entries), sessions: extractSessions(sessionEvents) };
 }

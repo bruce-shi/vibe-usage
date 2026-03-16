@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { aggregateToBuckets } from './index.js';
+import { aggregateToBuckets, extractSessions } from './index.js';
 
 // OpenClaw stores data at ~/.openclaw/agents/<agentId>/sessions/*.jsonl
 // Legacy paths: ~/.clawdbot, ~/.moltbot, ~/.moldbot
@@ -22,6 +22,7 @@ function getTokens(usage, ...keys) {
 
 export async function parse() {
   const entries = [];
+  const sessionEvents = [];
 
   for (const root of POSSIBLE_ROOTS) {
     const agentsDir = join(root, 'agents');
@@ -62,18 +63,26 @@ export async function parse() {
           try {
             const obj = JSON.parse(line);
 
-            // Only process message entries with assistant role
             if (obj.type !== 'message') continue;
             const msg = obj.message;
-            if (!msg || msg.role !== 'assistant') continue;
-
-            const usage = msg.usage;
-            if (!usage) continue;
+            if (!msg) continue;
 
             const timestamp = obj.timestamp || msg.timestamp;
             if (!timestamp) continue;
             const ts = new Date(typeof timestamp === 'number' ? timestamp : timestamp);
             if (isNaN(ts.getTime())) continue;
+
+            sessionEvents.push({
+              sessionId: filePath,
+              source: 'openclaw',
+              project,
+              timestamp: ts,
+              role: msg.role === 'user' ? 'user' : 'assistant',
+            });
+
+            if (msg.role !== 'assistant') continue;
+            const usage = msg.usage;
+            if (!usage) continue;
 
             entries.push({
               source: 'openclaw',
@@ -93,5 +102,5 @@ export async function parse() {
     }
   }
 
-  return aggregateToBuckets(entries);
+  return { buckets: aggregateToBuckets(entries), sessions: extractSessions(sessionEvents) };
 }
