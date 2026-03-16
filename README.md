@@ -29,10 +29,10 @@ npx vibe-usage status       # Show config & detected tools
 
 | Tool | Data Location |
 |------|---------------|
-| Claude Code | `~/.claude/projects/` |
+| Claude Code | `~/.claude/projects/` (tokens + sessions), `~/.claude/transcripts/` (sessions only) |
 | Codex CLI | `~/.codex/sessions/` |
 | Gemini CLI | `~/.gemini/tmp/` |
-| OpenCode | `~/.local/share/opencode/opencode.db` (SQLite) |
+| OpenCode | `~/.local/share/opencode/opencode.db` (SQLite, `json_extract` query) |
 | OpenClaw | `~/.openclaw/agents/` |
 | Qwen Code | `~/.qwen/tmp/` |
 | Kimi Code | `~/.kimi/sessions/` |
@@ -41,13 +41,25 @@ npx vibe-usage status       # Show config & detected tools
 
 - Parses local session logs from each AI coding tool
 - Aggregates token usage into 30-minute buckets
-- Uploads to your vibecafe.ai dashboard
+- Extracts session metadata: active time (sum of turn durations), total duration, message counts
+- Uploads buckets + sessions to your vibecafe.ai dashboard
 - Stateless: computes full totals from local logs each sync (idempotent, no state files)
 - For continuous syncing, use `npx vibe-usage daemon` or the [Vibe Usage Mac app](https://github.com/vibe-cafe/vibe-usage-app)
 
+## Development
+
+Test against a local vibe-cafe dev server without publishing:
+
+```bash
+VIBE_USAGE_DEV=1 VIBE_USAGE_API_URL=http://localhost:3000 npx vibe-usage init
+VIBE_USAGE_DEV=1 npx vibe-usage sync
+```
+
+`VIBE_USAGE_DEV=1` uses a separate config file (`~/.vibe-usage/config.dev.json`).
+
 ## Config
 
-Config stored at `~/.vibe-usage/config.json`. Contains your API key and server URL.
+Config stored at `~/.vibe-usage/config.json` (dev: `config.dev.json`). Contains your API key and server URL.
 
 ## Daemon Mode
 
