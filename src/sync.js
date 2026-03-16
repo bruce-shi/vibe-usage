@@ -4,6 +4,7 @@ import { ingest, fetchSettings } from './api.js';
 import { parsers } from './parsers/index.js';
 
 const BATCH_SIZE = 100;
+const SESSION_BATCH_SIZE = 500;
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes}B`;
@@ -85,7 +86,9 @@ export async function runSync({ throws = false, quiet = false } = {}) {
 
   let totalIngested = 0;
   let totalSessionsSynced = 0;
-  const totalBatches = Math.ceil(Math.max(allBuckets.length, 1) / BATCH_SIZE);
+  const bucketBatches = Math.ceil(allBuckets.length / BATCH_SIZE);
+  const sessionBatches = Math.ceil(allSessions.length / SESSION_BATCH_SIZE);
+  const totalBatches = Math.max(bucketBatches, sessionBatches, 1);
 
   const parts = [];
   if (allBuckets.length > 0) parts.push(`${allBuckets.length} buckets`);
@@ -93,18 +96,18 @@ export async function runSync({ throws = false, quiet = false } = {}) {
   console.log(`Uploading ${parts.join(' + ')} (${totalBatches} batch${totalBatches > 1 ? 'es' : ''})...`);
 
   try {
-    for (let i = 0; i < Math.max(allBuckets.length, 1); i += BATCH_SIZE) {
-      const batch = allBuckets.slice(i, i + BATCH_SIZE);
-      const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+    for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
+      const batch = allBuckets.slice(batchIdx * BATCH_SIZE, (batchIdx + 1) * BATCH_SIZE);
+      const batchSessions = allSessions.slice(batchIdx * SESSION_BATCH_SIZE, (batchIdx + 1) * SESSION_BATCH_SIZE);
+      const batchNum = batchIdx + 1;
       const prefix = totalBatches > 1 ? `  [${batchNum}/${totalBatches}] ` : '  ';
-      const batchSessions = i === 0 ? allSessions : undefined;
 
       const result = await ingest(apiUrl, config.apiKey, batch, {
         onProgress(sent, total) {
           const pct = Math.round((sent / total) * 100);
           process.stdout.write(`\r${prefix}${formatBytes(sent)}/${formatBytes(total)} (${pct}%)\x1b[K`);
         },
-      }, batchSessions);
+      }, batchSessions.length > 0 ? batchSessions : undefined);
       totalIngested += result.ingested ?? batch.length;
       totalSessionsSynced += result.sessions ?? 0;
     }
