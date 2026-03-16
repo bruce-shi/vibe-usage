@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { parse as parseClaudeCode } from './claude-code.js';
 import { parse as parseCodex } from './codex.js';
 import { parse as parseGeminiCli } from './gemini-cli.js';
@@ -53,4 +54,73 @@ export function aggregateToBuckets(entries) {
   }
 
   return Array.from(map.values());
+}
+
+/**
+ * Extract session metadata from timing events.
+ * Each event: { sessionId, source, project, timestamp: Date, role: 'user'|'assistant' }
+ *
+ * Turn = user prompt → last agent message before next user prompt.
+ * activeSeconds = sum(turn durations). durationSeconds = wall clock.
+ */
+export function extractSessions(events) {
+  const groups = new Map();
+  for (const e of events) {
+    if (!groups.has(e.sessionId)) groups.set(e.sessionId, []);
+    groups.get(e.sessionId).push(e);
+  }
+
+  const sessions = [];
+  for (const [sessionId, sessionEvents] of groups) {
+    sessionEvents.sort((a, b) => a.timestamp - b.timestamp);
+
+    const first = sessionEvents[0];
+    const last = sessionEvents[sessionEvents.length - 1];
+    const durationSeconds = Math.round((last.timestamp - first.timestamp) / 1000);
+
+    let activeSeconds = 0;
+    let turnStart = null;
+    let turnEnd = null;
+
+    for (const event of sessionEvents) {
+      if (event.role === 'user') {
+        if (turnStart !== null && turnEnd !== null && turnEnd > turnStart) {
+          activeSeconds += Math.round((turnEnd - turnStart) / 1000);
+        }
+        turnStart = event.timestamp;
+        turnEnd = event.timestamp;
+      } else if (turnStart !== null) {
+        turnEnd = event.timestamp;
+      }
+    }
+    if (turnStart !== null && turnEnd !== null && turnEnd > turnStart) {
+      activeSeconds += Math.round((turnEnd - turnStart) / 1000);
+    }
+
+    const userPromptHours = new Array(24).fill(0);
+    let userMessageCount = 0;
+    for (const event of sessionEvents) {
+      if (event.role === 'user') {
+        userMessageCount++;
+        userPromptHours[event.timestamp.getUTCHours()]++;
+      }
+    }
+
+    const sessionHash = createHash('sha256').update(sessionId).digest('hex').slice(0, 16);
+
+    sessions.push({
+      source: first.source,
+      project: first.project || 'unknown',
+      sessionHash,
+      firstMessageAt: first.timestamp.toISOString(),
+      lastMessageAt: last.timestamp.toISOString(),
+      durationSeconds,
+      activeSeconds,
+      messageCount: sessionEvents.length,
+      userMessageCount,
+      userPromptHours,
+    });
+  }
+
+  return sessions;
 }
