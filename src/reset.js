@@ -39,7 +39,7 @@ export async function runReset(args = []) {
     console.log(`Deleting remote data for host: ${currentHost}...`);
     try {
       const result = await deleteAllData(apiUrl, config.apiKey, { hostname: currentHost });
-      console.log(`Deleted ${result.deleted} buckets from server.`);
+      console.log(`Deleted ${result.deleted} buckets, ${result.sessions ?? 0} sessions from server.`);
     } catch (err) {
       if (err.message === 'UNAUTHORIZED') {
         console.error('Invalid API key. Run `npx @vibe-cafe/vibe-usage init` to reconfigure.');
@@ -59,7 +59,7 @@ export async function runReset(args = []) {
     console.log('Deleting all remote data...');
     try {
       const result = await deleteAllData(apiUrl, config.apiKey);
-      console.log(`Deleted ${result.deleted} buckets from server.`);
+      console.log(`Deleted ${result.deleted} buckets, ${result.sessions ?? 0} sessions from server.`);
     } catch (err) {
       if (err.message === 'UNAUTHORIZED') {
         console.error('Invalid API key. Run `npx @vibe-cafe/vibe-usage init` to reconfigure.');
