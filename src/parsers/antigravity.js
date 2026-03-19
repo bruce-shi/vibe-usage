@@ -177,6 +177,45 @@ async function probeHttpPort(ports, csrfToken) {
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
+/**
+ * Normalize model names to canonical forms.
+ */
+const MODEL_NORMALIZE_MAP = {
+  'claude-opus-4-6-thinking': 'claude-opus-4-6',
+  'gemini-3-flash-c': 'gemini-3-flash',
+  "gemini-3.1-pro-high": "gemini-3.1-pro",
+  "gemini-3.1-pro-low": "gemini-3.1-pro",
+  "gemini-3-pro-high": "gemini-3-pro",
+  "gemini-3-pro-low": "gemini-3-pro",
+};
+
+/**
+ * Map internal placeholder model IDs to canonical names.
+ * Used when responseModel is empty and only chatModel.model is available.
+ */
+const PLACEHOLDER_MODEL_MAP = {
+  'MODEL_PLACEHOLDER_M37': 'gemini-3.1-pro',
+  'MODEL_PLACEHOLDER_M36': 'gemini-3.1-pro',
+  'MODEL_PLACEHOLDER_M47': 'gemini-3-flash',
+  'MODEL_PLACEHOLDER_M35': 'claude-sonnet-4-6',
+  'MODEL_PLACEHOLDER_M26': 'claude-opus-4-6',
+  'MODEL_OPENAI_GPT_OSS_120B_MEDIUM': 'gpt-oss-120b',
+};
+
+function normalizeModel(raw) {
+  return MODEL_NORMALIZE_MAP[raw] || raw;
+}
+
+/**
+ * Resolve model name: prefer responseModel, fall back to placeholder map.
+ */
+function resolveModel(chatModel) {
+  if (chatModel.responseModel) return normalizeModel(chatModel.responseModel);
+  const placeholder = chatModel.model || '';
+  if (PLACEHOLDER_MODEL_MAP[placeholder]) return PLACEHOLDER_MODEL_MAP[placeholder];
+  return 'unknown';
+}
+
 function toSafeNumber(value) {
   if (value == null) return 0;
   const n = Number(value);
@@ -253,6 +292,7 @@ export async function parse() {
   const entries = [];
   const sessionEvents = [];
   const seenResponseIds = new Set();
+  const unknownModelMetas = [];
 
   console.log("[antigravity] changed files", changedFiles);
 
@@ -270,8 +310,6 @@ export async function parse() {
     const steps = trajectory.steps || [];
     const metadataList = trajectory.generatorMetadata || [];
 
-    console.log("[antigravity] trajectory has ", steps.length, "steps");
-    console.log("[antigravity] metadataList has ", metadataList.length, "metadataList");
 
     // Extract project from trajectory metadata workspaces
     let project = 'unknown';
@@ -285,7 +323,7 @@ export async function parse() {
       const chatModel = meta?.chatModel;
       if (!chatModel) continue;
 
-      const responseModel = chatModel.responseModel || 'unknown';
+      const responseModel = resolveModel(chatModel);
       const createdAt = chatModel?.chatStartMetadata?.createdAt;
       const ts = createdAt ? new Date(createdAt) : null;
       if (!ts || isNaN(ts.getTime())) continue;
