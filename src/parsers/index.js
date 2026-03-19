@@ -7,6 +7,8 @@ import { parse as parseOpencode } from './opencode.js';
 import { parse as parseOpenclaw } from './openclaw.js';
 import { parse as parseQwenCode } from './qwen-code.js';
 import { parse as parseKimiCode } from './kimi-code.js';
+import { parse as parseAmp } from './amp.js';
+import { parse as parseDroid } from './droid.js';
 
 export const parsers = {
   'claude-code': parseClaudeCode,
@@ -17,6 +19,8 @@ export const parsers = {
   'openclaw': parseOpenclaw,
   'qwen-code': parseQwenCode,
   'kimi-code': parseKimiCode,
+  'amp': parseAmp,
+  'droid': parseDroid,
 };
 
 

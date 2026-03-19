@@ -43,6 +43,16 @@ export const TOOLS = [
     id: 'kimi-code',
     dataDir: join(homedir(), '.kimi', 'sessions'),
   },
+  {
+    name: 'Amp',
+    id: 'amp',
+    dataDir: join(homedir(), '.local', 'share', 'amp', 'threads'),
+  },
+  {
+    name: 'Droid',
+    id: 'droid',
+    dataDir: join(homedir(), '.factory', 'sessions'),
+  },
 ];
 
 export function detectInstalledTools() {
