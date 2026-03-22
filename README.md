@@ -37,6 +37,7 @@ npx @vibe-cafe/vibe-usage status       # Show config & detected tools
 | OpenClaw | `~/.openclaw/agents/` |
 | Qwen Code | `~/.qwen/tmp/` |
 | Kimi Code | `~/.kimi/sessions/` |
+| Antigravity | `~/.antigravity/logs/` |
 
 ## How It Works
 
