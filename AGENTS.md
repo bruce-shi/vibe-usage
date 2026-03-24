@@ -26,7 +26,8 @@ vibe-usage/
 │   ├── api.js                 # HTTP client: ingest(), deleteAllData(), fetchSettings()
 │   ├── config.js              # ~/.vibe-usage/config.json (dev: config.dev.json)
 │   ├── init.js                # Interactive setup (API key, verify, initial sync)
-│   ├── daemon.js              # 5-minute sync loop
+│   ├── daemon.js              # 5-minute sync loop (foreground)
+│   ├── daemon-service.js      # Background service management (systemd/launchd install/uninstall/status)
 │   ├── reset.js               # Delete remote data + re-sync
 │   └── skill.js               # Install/remove SKILL.md for AI coding tools
 ├── SKILL.md                   # Skill definition (also used by `npx skills add`)

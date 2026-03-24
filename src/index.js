@@ -109,8 +109,14 @@ export async function run(args) {
     }
     case 'daemon':
     case '--daemon': {
-      const { runDaemon } = await import('./daemon.js');
-      await runDaemon();
+      const sub = args[1];
+      if (sub && ['install', 'uninstall', 'status', 'stop', 'restart'].includes(sub)) {
+        const { manageDaemon } = await import('./daemon-service.js');
+        await manageDaemon(sub);
+      } else {
+        const { runDaemon } = await import('./daemon.js');
+        await runDaemon();
+      }
       break;
     }
     case 'skill': {
@@ -136,7 +142,12 @@ export async function run(args) {
     npx @vibe-cafe/vibe-usage              Init (first run) or sync
     npx @vibe-cafe/vibe-usage init         Set up API key
     npx @vibe-cafe/vibe-usage sync         Manually sync usage data
-    npx @vibe-cafe/vibe-usage daemon       Continuous sync (every 5m)
+    npx @vibe-cafe/vibe-usage daemon       Continuous sync (every 5m, foreground)
+    npx @vibe-cafe/vibe-usage daemon install    Install background service (systemd/launchd)
+    npx @vibe-cafe/vibe-usage daemon uninstall  Remove background service
+    npx @vibe-cafe/vibe-usage daemon status     Show background service status
+    npx @vibe-cafe/vibe-usage daemon stop       Stop background service
+    npx @vibe-cafe/vibe-usage daemon restart    Restart background service
     npx @vibe-cafe/vibe-usage reset        Delete all data and re-upload
     npx @vibe-cafe/vibe-usage reset --local  Delete data for this host only and re-upload
     npx @vibe-cafe/vibe-usage skill         Install skill for AI coding tools
