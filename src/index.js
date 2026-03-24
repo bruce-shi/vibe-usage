@@ -113,6 +113,11 @@ export async function run(args) {
       await runDaemon();
       break;
     }
+    case 'skill': {
+      const { runSkill } = await import('./skill.js');
+      await runSkill(args.slice(1));
+      break;
+    }
     case 'config': {
       handleConfig(args.slice(1));
       break;
@@ -134,6 +139,8 @@ export async function run(args) {
     npx @vibe-cafe/vibe-usage daemon       Continuous sync (every 5m)
     npx @vibe-cafe/vibe-usage reset        Delete all data and re-upload
     npx @vibe-cafe/vibe-usage reset --local  Delete data for this host only and re-upload
+    npx @vibe-cafe/vibe-usage skill         Install skill for AI coding tools
+    npx @vibe-cafe/vibe-usage skill --remove  Remove installed skills
     npx @vibe-cafe/vibe-usage status       Show config and detected tools
     npx @vibe-cafe/vibe-usage config show  Show full config as JSON
     npx @vibe-cafe/vibe-usage config get <key>   Get a config value
